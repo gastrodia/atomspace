@@ -148,14 +148,16 @@ SCM PrimitiveEnviron::do_call(SCM sfe, SCM arglist)
 	{
 		rc = fe->invoke(arglist);
 	}
-	catch (const std::exception& ex)
+	catch (const std::exception &ex)
 	{
-		SchemeSmob::throw_exception(ex, fe->get_name(), arglist);
+		logger().error("SchemeSmob::throw_exception(ex, fe->get_name(), arglist);");
+		//SchemeSmob::throw_exception(ex, fe->get_name(), arglist);
 	}
 	catch (...)
 	{
-		std::exception ex;
-		SchemeSmob::throw_exception(ex, fe->get_name(), arglist);
+		logger().error("SchemeSmob::throw_exception(ex, fe->get_name(), arglist);");
+		//std::exception ex;
+		//SchemeSmob::throw_exception(ex, fe->get_name(), arglist);
 	}
 	scm_remember_upto_here_1(sfe);
 	return rc;
