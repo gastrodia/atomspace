@@ -40,7 +40,7 @@ public:
 	EvaluationLink(const Handle& schema, const Handle& args);
 	EvaluationLink(const Link& l);
 
-	TruthValuePtr evaluate(AtomSpace* as) {
+	TruthValuePtr evaluate(AtomSpace* as, bool silent) {
 	    return do_evaluate(as, get_handle());
 	}
 
@@ -50,12 +50,6 @@ public:
 	                                     const Handle&,
 	                                     AtomSpace* scratch,
 	                                     bool silent=false);
-	static TruthValuePtr do_evaluate(AtomSpace*,
-	                                 const HandleSeq& schema_and_args,
-	                                 bool silent=false);
-	static TruthValuePtr do_evaluate(AtomSpace*,
-	                                 const Handle& schema, const Handle& args,
-	                                 bool silent=false);
 
 	static Handle factory(const Handle&);
 };

@@ -23,14 +23,15 @@
 
 #include <string>
 
-#include <opencog/util/mt19937ar.h>
-#include <opencog/util/random.h>
-#include <opencog/util/Logger.h>
-#include <opencog/atoms/base/ClassServer.h>
+// #include <opencog/util/mt19937ar.h>
+// #include <opencog/util/random.h>
+// #include <opencog/util/Logger.h>
+#include <opencog/atoms/atom_types/NameServer.h>
+#include <opencog/atoms/base/hash.h>
+#include <opencog/atoms/core/FindUtils.h>
 #include <opencog/atoms/core/LambdaLink.h>
 #include <opencog/atoms/core/TypeNode.h>
-#include <opencog/atomutils/TypeUtils.h>
-#include <opencog/atomutils/FindUtils.h>
+#include <opencog/atoms/core/TypeUtils.h>
 
 #include "ScopeLink.h"
 
@@ -50,9 +51,9 @@ ScopeLink::ScopeLink(const Handle& vars, const Handle& body)
 bool ScopeLink::skip_init(Type t)
 {
 	// Type must be as expected.
-	if (not classserver().isA(t, SCOPE_LINK))
+	if (not nameserver().isA(t, SCOPE_LINK))
 	{
-		const std::string& tname = classserver().getTypeName(t);
+		const std::string& tname = nameserver().getTypeName(t);
 		throw InvalidParamException(TRACE_INFO,
 			"Expecting a ScopeLink, got %s", tname.c_str());
 	}
@@ -62,7 +63,7 @@ bool ScopeLink::skip_init(Type t)
 	// do an if-statement here.
 	if (IMPLICATION_SCOPE_LINK == t) return true;
 	if (PUT_LINK == t) return true;
-	if (classserver().isA(t, PATTERN_LINK)) return true;
+	if (nameserver().isA(t, PATTERN_LINK)) return true;
 	return false;
 }
 
@@ -113,7 +114,7 @@ void ScopeLink::extract_variables(const HandleSeq& oset)
 	{
 		_body = oset[0];
 
-		if (classserver().isA(_body->get_type(), LAMBDA_LINK))
+		if (nameserver().isA(_body->get_type(), LAMBDA_LINK))
 		{
 			LambdaLinkPtr lam(LambdaLinkCast(_body));
 			_varlist = lam->get_variables();
@@ -206,7 +207,7 @@ bool ScopeLink::is_equal(const Handle& other, bool silent) const
 		Handle h = getOutgoingAtom(i + vardecl_offset);
 		Handle other_h = other->getOutgoingAtom(i + other_vardecl_offset);
 		other_h = scother->_varlist.substitute_nocheck(other_h,
-		                                         _varlist.varseq, silent);
+		                                               _varlist.varseq, silent);
 		// Compare them, they should match.
 		if (*((AtomPtr)h) != *((AtomPtr) other_h)) return false;
 	}
@@ -221,66 +222,16 @@ bool ScopeLink::is_equal(const Handle& other, bool silent) const
 /// the actual variable names have to be excluded from the hash,
 /// and a standardized set used instead.
 //
-// There's a lot of prime-numbers in the code below, but the
-// actual mixing and avalanching is extremely poor. I'm hoping
-// its good enough for hash buckets, but have not verified.
+// "Mixing" refers to the idea of combining together two values, such
+// that thier bits are mixed together (in the formal, mathematical
+// definition, which includes ideas about increasing entropy).  Hash
+// functions are designed to be very good at mixing.
 //
-// (In the code below, the numbers of the form `((1UL<<35) - 325)`
-// etc. are all prime numbers. "Mixing" refers to code having the
-// form `hash += (hash<<5) + other_stuff;` -- the shift and add
-// mixes the bits. "Avalanching" refers to single-bit differences
-// rapidly turning into multi-bit differences.)
-//
-// There's also an issue that there are multiple places where the
-// hash must not mix, and must stay abelian, in order to deal with
-// unordered links and alpha-conversion. (Here, "abelian" refers to
-// order independence; addition is abelian; while "mixing" as
-// defined above, is non-abelian).
-//
-
-
-// Fowler–Noll–Vo hash function
-// Parameters are taken from author's page
-// http://www.isthe.com/chongo/tech/comp/fnv/index.html#FNV-1a
-const size_t FNV_32_PRIME = 0x01000193;
-const size_t FNV_32_OFFSET = 0x811c9dc5;
-const size_t FNV_64_PRIME = 0x100000001b3;
-const size_t FNV_64_OFFSET = 0xcbf29ce484222325;
-
-template <unsigned n>
-constexpr size_t get_fvna_prime(){
-	return FNV_32_PRIME;
-}
-
-template <>
-constexpr size_t get_fvna_prime<8>(){
-	return FNV_64_PRIME;
-}
-
-template <unsigned n>
-constexpr size_t get_fvna_offset(){
-	return FNV_32_OFFSET;
-}
-
-template <>
-constexpr size_t get_fvna_offset<8>(){
-	return FNV_64_OFFSET;
-}
-
-template<typename T>
-ContentHash fnv1a_hash (ContentHash & hval, T buf_t)
-{
-	uint size = sizeof(buf_t);
-	const char * buf = (const char *)&buf_t;
-	size_t count = 0;
-	while (count < size)
-	{
-		hval ^= (unsigned int)*(buf+count);
-		hval *= (ContentHash)get_fvna_prime<sizeof(ContentHash)>();
-		count ++;
-	}
-	return hval;
-}
+// There are multiple places where the combination of two hash values
+// must not mix, and must stay order-independent (i.e. abelian). This
+// is needed to deal with unordered links and alpha-conversion.
+// Addition is "abelian": A+B = B+A while most functions that mix are
+// non-abalian -- the result depends on the order of the operations.
 
 ContentHash ScopeLink::compute_hash() const
 {
@@ -290,12 +241,13 @@ ContentHash ScopeLink::compute_hash() const
 
 	// It is not safe to mix here, since the sort order of the
 	// typemaps will depend on the variable names. So must be
-	// abelian.
+	// abelian. That is, we must use addition.
 	ContentHash vth = 0;
 	for (const auto& pr : _varlist._simple_typemap)
 	{
-		for (Type t : pr.second) vth += ((1UL<<19) - 87) * t;
+		for (Type t : pr.second) vth += t;
 	}
+	fnv1a_hash(hsh, vth);
 
 	for (const auto& pr : _varlist._deep_typemap)
 	{
@@ -303,9 +255,13 @@ ContentHash ScopeLink::compute_hash() const
 	}
 	fnv1a_hash(hsh, vth);
 
+	for(const auto& pr: _varlist._glob_intervalmap){
+		vth += pr.first->get_hash();
+	}
+	fnv1a_hash(hsh, vth);
+
 	Arity vardecl_offset = _vardecl != Handle::UNDEFINED;
 	Arity n_scoped_terms = get_arity() - vardecl_offset;
-
 	UnorderedHandleSet hidden;
 	for (Arity i = 0; i < n_scoped_terms; ++i)
 	{
@@ -337,7 +293,9 @@ ContentHash ScopeLink::term_hash(const Handle& h,
 	{
 		// Alpha-convert the variable "name" to its unique position
 		// in the sequence of bound vars.  Thus, the name is unique.
-		return ((1UL<<24)-77) * (1 + _varlist.index.find(h)->second);
+		ContentHash hsh = get_fvna_offset<sizeof(ContentHash)>();
+		fnv1a_hash(hsh, (1 + _varlist.index.find(h)->second));
+		return hsh;
 	}
 
 	// Just the plain old hash for all other nodes.
@@ -347,7 +305,7 @@ ContentHash ScopeLink::term_hash(const Handle& h,
 	quotation.update(t);
 
 	// Other embedded ScopeLinks might be hiding some of our variables...
-	bool issco = classserver().isA(t, SCOPE_LINK);
+	bool issco = nameserver().isA(t, SCOPE_LINK);
 	UnorderedHandleSet bsave;
 	if (issco)
 	{
@@ -358,21 +316,25 @@ ContentHash ScopeLink::term_hash(const Handle& h,
 		const Variables& vees = sco->get_variables();
 		for (const Handle& v : vees.varseq) bound_vars.insert(v);
 	}
+
 	// As discussed in issue #1176, compute the individual term_hashes
 	// first, then sort them, and then mix them!  This provides the
 	// desired qualities: different unordered links can be directly
 	// compared, and also have good mixing/avalanching properties.
-	ContentHash hsh = ((1UL<<8) - 59) * t;
 	std::vector<ContentHash> hash_vec;
 	for (const Handle& ho: h->getOutgoingSet())
 	{
 		hash_vec.push_back(term_hash(ho, bound_vars, quotation));
 	}
+
 	// hash_vec should be sorted only for unordered links
-	if (classserver().isA(t, UNORDERED_LINK)) {
+	if (nameserver().isA(t, UNORDERED_LINK)) {
 		std::sort(hash_vec.begin(), hash_vec.end());
 	}
-	for(ContentHash & t_hash: hash_vec){
+
+	ContentHash hsh = get_fvna_offset<sizeof(ContentHash)>();
+	fnv1a_hash(hsh, t);
+	for (ContentHash & t_hash: hash_vec) {
 		fnv1a_hash(hsh, t_hash);
 	}
 

@@ -30,11 +30,11 @@
 
 #include <cstdio>
 
-#include <opencog/atoms/base/atom_types.h>
+#include <opencog/atoms/atom_types/atom_types.h>
 #include <opencog/atoms/base/Atom.h>
 #include <opencog/atoms/base/Link.h>
 #include <opencog/atoms/base/Node.h>
-#include <opencog/truthvalue/SimpleTruthValue.h>
+#include <opencog/atoms/truthvalue/SimpleTruthValue.h>
 #include <opencog/persist/sql/multi-driver/SQLAtomStorage.h>
 #include <opencog/persist/sql/multi-driver/SQLPersistSCM.h>
 
@@ -475,6 +475,8 @@ void DeleteUTest::do_test_remove(void)
 {
     logger().debug("BEGIN TEST: %s", __FUNCTION__);
 
+    kill_data();
+
     SQLPersistSCM* _pm = new SQLPersistSCM(_as);
     TSM_ASSERT("Persist Module not loaded", _pm);
 
@@ -487,8 +489,6 @@ void DeleteUTest::do_test_remove(void)
         friendlyFailMessage();
         exit(1);
     };
-
-    kill_data();
 
     int idx = 0;
     add_to_space(idx++, _as, "AA-aa-wow ");

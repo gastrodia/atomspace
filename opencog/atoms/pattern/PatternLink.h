@@ -71,8 +71,6 @@ namespace opencog
 /// components; the components themselves are connected only by
 /// virtual links.
 ///
-/// The (cog-satisfy) and (cog-execute!) scheme calls can ground this
-/// link, and return a truth value.
 class PatternLink;
 typedef std::shared_ptr<PatternLink> PatternLinkPtr;
 class PatternLink : public PrenexLink
@@ -95,24 +93,19 @@ protected:
 	HandleSetSeq _component_vars;
 	HandleSeq _component_patterns;
 
+	bool record_literal(const Handle&, bool reverse=false);
 	void unbundle_clauses(const Handle& body);
-	void unbundle_clauses_rec(const TypeSet&,
-	                          const HandleSeq&);
+	void unbundle_clauses_rec(const Handle&,
+	                          const TypeSet&,
+	                          bool reverse=false);
 
-	void locate_defines(HandleSeq& clauses);
-	void locate_globs(HandleSeq& clauses);
-	void validate_clauses(HandleSet& vars,
-	                      HandleSeq& clauses,
-	                      HandleSeq& constants);
+	void locate_defines(const HandleSeq& clauses);
+	void locate_globs(const HandleSeq& clauses);
+	void validate_variables(HandleSet& vars,
+	                        const HandleSeq& clauses);
 
-	void extract_optionals(const HandleSet &vars,
-	                       const HandleSeq &component);
-
-	void unbundle_virtual(const HandleSet& vars,
-	                      const HandleSeq& clauses,
-	                      HandleSeq& concrete_clauses,
-	                      HandleSeq& virtual_clauses,
-	                      HandleSet& black_clauses);
+	bool is_virtual(const Handle&);
+	void unbundle_virtual(const HandleSeq& clauses);
 
 	bool add_dummies();
 
@@ -134,10 +127,6 @@ protected:
 	void common_init(void);
 	void setup_components(void);
 
-public:
-	// Cache the most recent resuts of the pattern match
-	void set_groundings(const Handle&);
-
 protected:
 	// utility debug print
 	static void prt(const Handle& h)
@@ -158,7 +147,7 @@ public:
 	            const VariableTypeMap& typemap,
 	            const GlobIntervalMap& intervalmap,
 	            const HandleSeq& component,
-	            const HandleSet& optionals);
+	            const HandleSeq& optionals);
 
 	// A backwards-compatibility constructor. Do not use.
 	PatternLink(const HandleSet&,
@@ -174,18 +163,15 @@ public:
 	const HandleSeq& get_fixed(void) const { return _fixed; }
 	const HandleSeq& get_virtual(void) const { return _virtual; }
 
-	// Given the queried atomspace, only remove constants if present
-	// in queried_as.
-	void remove_constant_clauses(const AtomSpace& queried_as);
-
 	bool satisfy(PatternMatchCallback&) const;
-
-	// Return the cached variable groundings.
-	Handle get_groundings() const;
 
 	void debug_log(void) const;
 
 	static Handle factory(const Handle&);
+
+	// For printing not only the link iteself but all the associated
+	// C++ attributes
+	std::string to_long_string(const std::string& indent) const;
 };
 
 static inline PatternLinkPtr PatternLinkCast(const Handle& h)
@@ -194,6 +180,11 @@ static inline PatternLinkPtr PatternLinkCast(AtomPtr a)
 	{ return std::dynamic_pointer_cast<PatternLink>(a); }
 
 #define createPatternLink std::make_shared<PatternLink>
+
+// For gdb, see
+// http://wiki.opencog.org/w/Development_standards#Print_OpenCog_Objects
+std::string oc_to_string(const PatternLink& pl,
+                         const std::string& indent=empty_string);
 
 /** @}*/
 }
